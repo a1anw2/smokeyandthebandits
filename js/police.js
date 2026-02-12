@@ -111,7 +111,8 @@ class PoliceCar extends Car {
     // Steer toward target
     const targetAngle = Math.atan2(targetY - this.y, targetX - this.x);
     const angleDiff = normalizeAngle(targetAngle - this.angle);
-    this.steerInput = clamp(angleDiff * 4.0, -1, 1); // 4.0 = aggressive steering response
+    const rawSteer = clamp(angleDiff * 3.0, -1, 1); // 3.0 = responsive steering
+    this.steerInput += (rawSteer - this.steerInput) * 0.3; // exponential smoothing damps oscillation
 
     // Speed control — aggressive pursuit
     const absTurn = Math.abs(angleDiff);
@@ -138,7 +139,8 @@ class PoliceCar extends Car {
 
     const targetAngle = roadInfo.angle;
     const angleDiff = normalizeAngle(targetAngle - this.angle);
-    this.steerInput = clamp(angleDiff * 2.0, -1, 1);
+    const rawSteer = clamp(angleDiff * 2.0, -1, 1);
+    this.steerInput += (rawSteer - this.steerInput) * 0.25; // gentle smoothing for patrol
 
     // Cruise at low speed
     if (this.speed > POLICE_CRUISE_SPEED) {

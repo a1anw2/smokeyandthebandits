@@ -80,6 +80,8 @@ const OFF_ROAD_PUSH_SPEED = 1.5;              // px — curb correction push
 const OFF_ROAD_SPEED_DECAY = 0.98;             // speed multiplier on curb
 const MIN_START_FINISH_DIST = 200;             // px — minimum distance between start and finish
 const MAX_SNAP_DIST = 500;                     // px — max snap distance for lat/lng → road point
+const LEADERBOARD_MAX_ENTRIES = 50;             // max stored best times (LRU eviction)
+const LEADERBOARD_STORAGE_KEY = 'satb_bestTimes'; // localStorage key
 
 // --- Particles ---
 const SKID_FADE_RATE = 0.08;                   // alpha/s

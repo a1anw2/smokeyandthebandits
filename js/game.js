@@ -1,7 +1,8 @@
 // ============================================================
 // GAME
 // ============================================================
-const GameState = { MENU: 0, MAP_SELECT: 1, LOADING: 2, COUNTDOWN: 3, RACING: 4, FINISHED: 5 };
+const GameState = { MENU: 0, MAP_SELECT: 1, LOADING: 2, COUNTDOWN: 3, RACING: 4, FINISHED: 5, PAUSED: 6 };
+Object.freeze(GameState);
 
 class Game {
   constructor() {
@@ -40,6 +41,7 @@ class Game {
     this.loadingProgress = 0;
     this.trackMode = TRACK_MODE_POINT_TO_POINT;
     this._loadingAborted = false;
+    this._raceKey = null;
 
     this._alanLinkBounds = null;
     this._githubLinkBounds = null;
@@ -294,6 +296,11 @@ class Game {
       this.loadingProgress = 1.0;
       this._setupRace();
 
+      // Generate leaderboard key from route coordinates
+      this._raceKey = (startLL && finishLL)
+        ? `${lat.toFixed(3)},${lng.toFixed(3)}_${startLL.lat.toFixed(3)},${startLL.lng.toFixed(3)}_${finishLL.lat.toFixed(3)},${finishLL.lng.toFixed(3)}`
+        : null;
+
       await new Promise(r => setTimeout(r, 300));
 
       this.state = GameState.COUNTDOWN;
@@ -373,7 +380,19 @@ class Game {
         break;
 
       case GameState.RACING:
+        if (this.input.wasPressed('KeyP') || this.input.wasPressed('Escape')) {
+          this.state = GameState.PAUSED;
+          this.sound.silence();
+          break;
+        }
         this._updateRacing(dt);
+        break;
+
+      case GameState.PAUSED:
+        if (this.input.wasPressed('KeyP') || this.input.wasPressed('Escape') || this.input.wasPressed('Space')) {
+          this.state = GameState.RACING;
+          this.sound.resume();
+        }
         break;
 
       case GameState.FINISHED:
@@ -431,6 +450,7 @@ class Game {
     if (this.player.finished) {
       this.state = GameState.FINISHED;
       this.sound.silence();
+      this._saveBestTime();
     }
   }
 
@@ -618,11 +638,23 @@ class Game {
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '10px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('TAB: map  N: sound  -/+: zoom', 10, 20);
+    if (!this.input.isMobile) {
+      ctx.fillText('TAB: map  N: sound  P: pause  -/+: zoom', 10, 20);
+    }
+
+    // Touch control zones hint (mobile, first 5 seconds of race)
+    if (this.input.isMobile && this.input.showTouchHint && this.state === GameState.RACING) {
+      this.hud.drawTouchHint(ctx);
+    }
 
     // countdown overlay
     if (this.state === GameState.COUNTDOWN) {
       this._renderCountdown();
+    }
+
+    // pause overlay
+    if (this.state === GameState.PAUSED) {
+      this._renderPaused();
     }
 
     // finish overlay
@@ -723,7 +755,11 @@ class Game {
     ctx.fillStyle = '#777';
     ctx.font = '11px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('Arrow Keys / WASD - Drive    SPACE - Drift    TAB - Map    N - Sound    -/+ Zoom', CANVAS_W/2, 298);
+    if (this.input.isMobile) {
+      ctx.fillText('Left side: Steer    Right side: Gas/Brake    Double-tap: Drift', CANVAS_W/2, 298);
+    } else {
+      ctx.fillText('Arrow Keys / WASD - Drive    SPACE - Drift    TAB - Map    N - Sound    -/+ Zoom', CANVAS_W/2, 298);
+    }
 
     // Mode options
     const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
@@ -731,7 +767,8 @@ class Game {
     ctx.fillStyle = `rgba(144,202,249,${0.4 + pulse * 0.6})`;
     ctx.font = 'bold 24px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('PRESS ENTER TO START', CANVAS_W/2, CANVAS_H/2 + 55);
+    const startText = this.input.isMobile ? 'TAP TO START' : 'PRESS ENTER TO START';
+    ctx.fillText(startText, CANVAS_W/2, CANVAS_H/2 + 55);
 
     // Animated chase scene at bottom
     const chaseY = CANVAS_H - 130;
@@ -857,6 +894,39 @@ class Game {
     }
   }
 
+  _renderPaused() {
+    const ctx = this.ctx;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // Center panel
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    roundRect(ctx, CANVAS_W/2 - 200, CANVAS_H/2 - 80, 400, 160, 12);
+    ctx.fill();
+
+    // PAUSED title
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 48px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSED', CANVAS_W/2, CANVAS_H/2 - 20);
+
+    // Resume hint
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '14px monospace';
+    ctx.fillText('P / ESC / SPACE to resume', CANVAS_W/2, CANVAS_H/2 + 30);
+
+    // Current stats
+    ctx.font = '12px monospace';
+    ctx.fillStyle = '#AAA';
+    const meters = this.player.distancePx / PIXELS_PER_METER;
+    const miles = meters / 1609.344;
+    const pct = Math.round(this.player.raceProgress * 100);
+    ctx.fillText(
+      `Time: ${this.hud.formatTime(this.raceTime)}  |  ${miles.toFixed(2)} mi  |  ${pct}%`,
+      CANVAS_W/2, CANVAS_H/2 + 55
+    );
+  }
+
   _renderFinish(sorted) {
     const ctx = this.ctx;
 
@@ -868,40 +938,56 @@ class Game {
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
+    // Title
     ctx.fillStyle = '#FFD700';
     ctx.font = 'bold 48px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('RUN COMPLETE!', CANVAS_W/2, 120);
 
-    // results table
-    ctx.font = 'bold 16px monospace';
-    ctx.fillStyle = '#AAA';
-    const cols = [CANVAS_W/2 - 200, CANVAS_W/2 - 80, CANVAS_W/2 + 50, CANVAS_W/2 + 170];
-    ctx.textAlign = 'left';
-    ctx.fillText('POS', cols[0], 180);
-    ctx.fillText('NAME', cols[1], 180);
-    ctx.fillText('TIME', cols[2], 180);
+    // Stats panel
+    const cx = CANVAS_W / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    roundRect(ctx, cx - 250, 150, 500, 200, 10);
+    ctx.fill();
 
+    // Time
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('TIME', cx, 185);
+    ctx.font = 'bold 36px monospace';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(this.hud.formatTime(this.raceTime), cx, 225);
+
+    // Distance and progress
     ctx.font = '15px monospace';
-    for (let i = 0; i < sorted.length; i++) {
-      const car = sorted[i];
-      const y = 210 + i * 30;
-      const isPlayer = car === this.player;
-      if (isPlayer) {
-        ctx.fillStyle = 'rgba(255,215,0,0.15)';
-        ctx.fillRect(cols[0] - 10, y - 16, 440, 26);
+    ctx.fillStyle = '#CCC';
+    const meters = this.player.distancePx / PIXELS_PER_METER;
+    const miles = meters / 1609.344;
+    ctx.fillText(`Distance: ${miles.toFixed(2)} mi`, cx - 120, 270);
+    ctx.fillText('Progress: 100%', cx + 120, 270);
+
+    // Warnings survived
+    ctx.fillStyle = '#AAA';
+    ctx.font = '13px monospace';
+    ctx.fillText(`Warnings: ${this.warnings} / ${MAX_WARNINGS}`, cx, 300);
+
+    // Personal best comparison
+    if (this._raceKey) {
+      const stored = this._getBestTime(this._raceKey);
+      if (stored && this.raceTime <= stored.time) {
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+        ctx.fillStyle = `rgba(76,175,80,${0.6 + pulse * 0.4})`;
+        ctx.font = 'bold 22px monospace';
+        ctx.fillText('NEW BEST!', cx, 340);
+      } else if (stored) {
+        ctx.fillStyle = '#90CAF9';
+        ctx.font = '14px monospace';
+        ctx.fillText(`Best: ${this.hud.formatTime(stored.time)}`, cx, 340);
       }
-      ctx.fillStyle = isPlayer ? '#FFD700' : '#DDD';
-      const suffix = (i+1) === 1 ? 'st' : (i+1) === 2 ? 'nd' : (i+1) === 3 ? 'rd' : 'th';
-      ctx.textAlign = 'left';
-      ctx.fillText(`${i+1}${suffix}`, cols[0], y);
-      ctx.fillStyle = car.color;
-      ctx.fillText(car.name, cols[1], y);
-      ctx.fillStyle = isPlayer ? '#FFD700' : '#DDD';
-      ctx.fillText(this.hud.formatTime(this.raceTime), cols[2], y);
     }
 
-    // restart prompt
+    // Restart prompt
     const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
     ctx.fillStyle = `rgba(255,255,255,${0.4 + pulse * 0.6})`;
     ctx.font = 'bold 16px monospace';
@@ -954,6 +1040,42 @@ class Game {
     ctx.fillStyle = `rgba(255,255,255,${0.4 + p2 * 0.6})`;
     ctx.font = 'bold 16px monospace';
     ctx.fillText('ENTER - Race Again    ESC - Menu', CANVAS_W/2, CANVAS_H - 70);
+  }
+
+  // ---- Leaderboard (localStorage) ----
+
+  _getBestTime(key) {
+    if (!key) return null;
+    try {
+      const data = JSON.parse(localStorage.getItem(LEADERBOARD_STORAGE_KEY) || '{}');
+      return data[key] || null;
+    } catch (e) { return null; }
+  }
+
+  _saveBestTime() {
+    if (!this._raceKey) return;
+    try {
+      const data = JSON.parse(localStorage.getItem(LEADERBOARD_STORAGE_KEY) || '{}');
+      const existing = data[this._raceKey];
+      if (!existing || this.raceTime < existing.time) {
+        const meters = this.player.distancePx / PIXELS_PER_METER;
+        const miles = meters / 1609.344;
+        data[this._raceKey] = {
+          time: this.raceTime,
+          date: new Date().toISOString(),
+          distance: parseFloat(miles.toFixed(2))
+        };
+        // LRU eviction: remove oldest entries if over limit
+        const keys = Object.keys(data);
+        if (keys.length > LEADERBOARD_MAX_ENTRIES) {
+          keys.sort((a, b) => (data[a].date || '').localeCompare(data[b].date || ''));
+          while (Object.keys(data).length > LEADERBOARD_MAX_ENTRIES) {
+            delete data[keys.shift()];
+          }
+        }
+        localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(data));
+      }
+    } catch (e) { console.warn('Could not save best time:', e); }
   }
 }
 

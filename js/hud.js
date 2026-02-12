@@ -390,18 +390,59 @@ class HUD {
         c.stroke();
       }
 
-      // Start marker (green)
+      // Start marker (green with "S" label)
       const sp = track.startPoint;
+      const spx = sp.x * scale + localOx;
+      const spy = sp.y * scale + localOy;
       c.fillStyle = '#4CAF50';
       c.beginPath();
-      c.arc(sp.x * scale + localOx, sp.y * scale + localOy, 4, 0, Math.PI * 2);
+      c.arc(spx, spy, 5, 0, Math.PI * 2);
       c.fill();
+      c.strokeStyle = '#FFF';
+      c.lineWidth = 1;
+      c.stroke();
+      c.fillStyle = '#FFF';
+      c.font = 'bold 9px monospace';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText('S', spx, spy);
 
-      // Finish marker (gold)
+      // Finish marker (gold flag with "F" label)
       const fp = track.finishPoint;
+      const fpx = fp.x * scale + localOx;
+      const fpy = fp.y * scale + localOy;
+      // Outer glow
+      c.fillStyle = 'rgba(255,215,0,0.3)';
+      c.beginPath();
+      c.arc(fpx, fpy, 9, 0, Math.PI * 2);
+      c.fill();
+      // Main circle
       c.fillStyle = '#FFD700';
       c.beginPath();
-      c.arc(fp.x * scale + localOx, fp.y * scale + localOy, 4, 0, Math.PI * 2);
+      c.arc(fpx, fpy, 6, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = '#FFF';
+      c.lineWidth = 1.5;
+      c.stroke();
+      // "F" label
+      c.fillStyle = '#000';
+      c.font = 'bold 8px monospace';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText('F', fpx, fpy);
+      // Flag pole + pennant
+      c.strokeStyle = '#FFD700';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(fpx, fpy - 6);
+      c.lineTo(fpx, fpy - 16);
+      c.stroke();
+      c.fillStyle = '#FFD700';
+      c.beginPath();
+      c.moveTo(fpx, fpy - 16);
+      c.lineTo(fpx + 7, fpy - 13);
+      c.lineTo(fpx, fpy - 10);
+      c.closePath();
       c.fill();
     } else {
       // Circuit: draw track outline
@@ -422,12 +463,22 @@ class HUD {
 
   drawWarningCounter(ctx, warnings, maxWarnings) {
     const x = CANVAS_W - 160, y = 62, w = 145, h = 35;
+    const danger = warnings >= maxWarnings - 1 && warnings < maxWarnings;
+
+    // Pulsing red glow when one away from busted
+    if (danger) {
+      const pulse = 0.5 + 0.5 * Math.sin(this._time * 6);
+      ctx.fillStyle = `rgba(200,30,30,${0.3 + pulse * 0.3})`;
+      roundRect(ctx, x - 2, y - 2, w + 4, h + 4, 8);
+      ctx.fill();
+    }
+
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     roundRect(ctx, x, y, w, h, 6);
     ctx.fill();
 
     // Label
-    ctx.fillStyle = '#AAA';
+    ctx.fillStyle = danger ? '#F44336' : '#AAA';
     ctx.font = '9px monospace';
     ctx.textAlign = 'left';
     ctx.fillText('WARNINGS', x + 8, y + h / 2 + 3);
@@ -487,6 +538,51 @@ class HUD {
     ctx.fillText('WARNING!', 0, 0);
 
     ctx.restore();
+
+    // Red vignette — screen-edge flash when a new warning fires
+    const vigAlpha = clamp(timer / maxDuration, 0, 1) * 0.4;
+    const vigGrad = ctx.createRadialGradient(
+      CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.3,
+      CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.7
+    );
+    vigGrad.addColorStop(0, 'rgba(200,30,30,0)');
+    vigGrad.addColorStop(1, `rgba(200,30,30,${vigAlpha})`);
+    ctx.fillStyle = vigGrad;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
     ctx.globalAlpha = 1;
+  }
+
+  drawTouchHint(ctx) {
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+
+    // Left half — steer zone
+    ctx.fillStyle = '#2196F3';
+    ctx.fillRect(0, 0, CANVAS_W / 2, CANVAS_H);
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('STEER', CANVAS_W / 4, CANVAS_H / 2);
+    ctx.font = '11px monospace';
+    ctx.fillText('< left | right >', CANVAS_W / 4, CANVAS_H / 2 + 20);
+
+    // Right half top — brake zone
+    ctx.fillStyle = '#F44336';
+    ctx.fillRect(CANVAS_W / 2, 0, CANVAS_W / 2, CANVAS_H / 2);
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText('BRAKE', CANVAS_W * 3 / 4, CANVAS_H / 4);
+
+    // Right half bottom — gas zone
+    ctx.fillStyle = '#4CAF50';
+    ctx.fillRect(CANVAS_W / 2, CANVAS_H / 2, CANVAS_W / 2, CANVAS_H / 2);
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText('GAS', CANVAS_W * 3 / 4, CANVAS_H * 3 / 4);
+    ctx.font = '11px monospace';
+    ctx.fillText('double-tap: drift', CANVAS_W * 3 / 4, CANVAS_H * 3 / 4 + 20);
+
+    ctx.restore();
   }
 }
