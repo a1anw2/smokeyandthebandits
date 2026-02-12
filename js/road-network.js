@@ -286,7 +286,7 @@ class RoadNetwork {
       tc.globalAlpha = 1.0;
 
       // Slight dark overlay to blend tiles with game aesthetic
-      tc.fillStyle = 'rgba(0,0,0,0.15)';
+      tc.fillStyle = 'rgba(0,0,0,0.08)';
       tc.fillRect(bounds.minX, bounds.minY, w, h);
     }
 

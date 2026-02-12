@@ -2,6 +2,8 @@
 // CONSTANTS & CONFIGURATION
 // ============================================================
 
+const GAME_VERSION = '2026.2.11';
+
 // --- Display ---
 const CANVAS_W = 1280, CANVAS_H = 720;        // pixels
 
@@ -92,7 +94,7 @@ const MAX_CANVAS_DIM = 10000;                  // px — cap off-screen canvas s
 const GRASS_STRIPE_HEIGHT = 40;                // px
 const CURB_SEGMENT_STEP = 8;                   // points per curb stripe
 const CURB_VISUAL_WIDTH = 8;                   // px
-const TILE_OPACITY = 0.45;                     // OSM background tile transparency
+const TILE_OPACITY = 0.7;                      // OSM background tile transparency
 
 // --- Sound ---
 const ENGINE_BASE_FREQ = 80;                   // Hz — idle engine frequency
@@ -126,8 +128,8 @@ const DEFAULT_ROAD_WIDTH = 30;
 const COLORS = {
   player: '#FFD700',
   ai: ['#E53935', '#1E88E5', '#43A047', '#8E24AA'],
-  grass: '#2E7D32',
-  grassDark: '#256427',
+  grass: '#1B5E20',
+  grassDark: '#174F1B',
   road: '#3A3A3A',
   roadLight: '#454545',
   curb1: '#E53935',

@@ -42,6 +42,8 @@ class Game {
     this.trackMode = TRACK_MODE_POINT_TO_POINT;
     this._loadingAborted = false;
     this._raceKey = null;
+    this._shareUrl = null;
+    this._copiedTimer = 0;
 
     this._alanLinkBounds = null;
     this._githubLinkBounds = null;
@@ -92,6 +94,17 @@ class Game {
     });
 
     requestAnimationFrame(t => this._loop(t));
+    this._checkShareLink();
+  }
+
+  _checkShareLink() {
+    const hash = window.location.hash;
+    if (!hash.startsWith('#race=')) return;
+    const parts = hash.slice(6).split(',').map(Number);
+    if (parts.length !== 6 || parts.some(n => !isFinite(n))) return;
+    const [lat, lng, startLat, startLng, finishLat, finishLng] = parts;
+    // Bypass menu and map picker — load directly
+    this._onLocationSelected(lat, lng, { lat: startLat, lng: startLng }, { lat: finishLat, lng: finishLng });
   }
 
   _resize() {
@@ -301,6 +314,15 @@ class Game {
         ? `${lat.toFixed(3)},${lng.toFixed(3)}_${startLL.lat.toFixed(3)},${startLL.lng.toFixed(3)}_${finishLL.lat.toFixed(3)},${finishLL.lng.toFixed(3)}`
         : null;
 
+      // Generate shareable URL
+      if (startLL && finishLL) {
+        const raceHash = `#race=${lat.toFixed(4)},${lng.toFixed(4)},${startLL.lat.toFixed(4)},${startLL.lng.toFixed(4)},${finishLL.lat.toFixed(4)},${finishLL.lng.toFixed(4)}`;
+        this._shareUrl = `${window.location.origin}${window.location.pathname}${raceHash}`;
+        history.replaceState(null, '', raceHash);
+      } else {
+        this._shareUrl = null;
+      }
+
       await new Promise(r => setTimeout(r, 300));
 
       this.state = GameState.COUNTDOWN;
@@ -389,13 +411,24 @@ class Game {
         break;
 
       case GameState.PAUSED:
+        if (this._copiedTimer > 0) this._copiedTimer -= dt;
         if (this.input.wasPressed('KeyP') || this.input.wasPressed('Escape') || this.input.wasPressed('Space')) {
           this.state = GameState.RACING;
           this.sound.resume();
         }
+        if (this.input.wasPressed('KeyM')) {
+          this.state = GameState.MENU;
+          this.sound.silence();
+          history.replaceState(null, '', window.location.pathname);
+        }
+        if (this.input.wasPressed('KeyC') && this._shareUrl) {
+          navigator.clipboard.writeText(this._shareUrl).catch(() => {});
+          this._copiedTimer = 2;
+        }
         break;
 
       case GameState.FINISHED:
+        if (this._copiedTimer > 0) this._copiedTimer -= dt;
         if (this.input.wasPressed('Enter') || this.input.wasPressed('Space') || this.input.wasPressed('KeyM')) {
           // Restart same track
           this._setupRace();
@@ -405,6 +438,11 @@ class Game {
         }
         if (this.input.wasPressed('Escape')) {
           this.state = GameState.MENU;
+          history.replaceState(null, '', window.location.pathname);
+        }
+        if (this.input.wasPressed('KeyC') && this._shareUrl) {
+          navigator.clipboard.writeText(this._shareUrl).catch(() => {});
+          this._copiedTimer = 2;
         }
         break;
     }
@@ -856,6 +894,12 @@ class Game {
     // store link bounds for click detection
     this._alanLinkBounds = { x: startX + creditWidth, y: CANVAS_H - 26, w: linkWidth, h: 16 };
 
+    // Version
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('v' + GAME_VERSION, CANVAS_W - 10, 15);
+
     // GitHub link
     const ghText = 'GitHub';
     ctx.font = '11px monospace';
@@ -901,7 +945,7 @@ class Game {
 
     // Center panel
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    roundRect(ctx, CANVAS_W/2 - 200, CANVAS_H/2 - 80, 400, 160, 12);
+    roundRect(ctx, CANVAS_W/2 - 200, CANVAS_H/2 - 80, 400, 185, 12);
     ctx.fill();
 
     // PAUSED title
@@ -913,7 +957,23 @@ class Game {
     // Resume hint
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.font = '14px monospace';
-    ctx.fillText('P / ESC / SPACE to resume', CANVAS_W/2, CANVAS_H/2 + 30);
+    ctx.fillText('P / ESC / SPACE to resume', CANVAS_W/2, CANVAS_H/2 + 25);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '12px monospace';
+    ctx.fillText('M — back to menu', CANVAS_W/2, CANVAS_H/2 + 45);
+
+    // Share link option
+    if (this._shareUrl) {
+      if (this._copiedTimer > 0) {
+        ctx.fillStyle = '#4CAF50';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText('Copied!', CANVAS_W/2, CANVAS_H/2 + 62);
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '12px monospace';
+        ctx.fillText('C — copy race link', CANVAS_W/2, CANVAS_H/2 + 62);
+      }
+    }
 
     // Current stats
     ctx.font = '12px monospace';
@@ -923,7 +983,7 @@ class Game {
     const pct = Math.round(this.player.raceProgress * 100);
     ctx.fillText(
       `Time: ${this.hud.formatTime(this.raceTime)}  |  ${miles.toFixed(2)} mi  |  ${pct}%`,
-      CANVAS_W/2, CANVAS_H/2 + 55
+      CANVAS_W/2, CANVAS_H/2 + 80
     );
   }
 
@@ -984,6 +1044,21 @@ class Game {
         ctx.fillStyle = '#90CAF9';
         ctx.font = '14px monospace';
         ctx.fillText(`Best: ${this.hud.formatTime(stored.time)}`, cx, 340);
+      }
+    }
+
+    // Share link option
+    if (this._shareUrl) {
+      if (this._copiedTimer > 0) {
+        ctx.fillStyle = '#4CAF50';
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('Copied!', CANVAS_W/2, CANVAS_H - 100);
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('C — copy race link', CANVAS_W/2, CANVAS_H - 100);
       }
     }
 
