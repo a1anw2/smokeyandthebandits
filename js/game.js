@@ -6,6 +6,7 @@ const GameState = { MENU: 0, MAP_SELECT: 1, LOADING: 2, COUNTDOWN: 3, RACING: 4,
 class Game {
   constructor() {
     this.canvas = document.getElementById('gameCanvas');
+    if (!this.canvas) throw new Error('gameCanvas element not found');
     this.canvas.width = CANVAS_W;
     this.canvas.height = CANVAS_H;
     this.ctx = this.canvas.getContext('2d');
@@ -22,9 +23,14 @@ class Game {
     this.raceTime = 0;
     this.showMiniMap = true;
     this.cars = [];
+    this.policeCars = [];
     this.player = null;
     this.lastTime = 0;
     this.soundStarted = false;
+    this.arrested = false;
+    this.warnings = 0;
+    this.warningPopupTimer = 0;
+    this.warningCooldown = 0;
 
     // OSM components
     this.osmLoader = new OSMLoader();
@@ -33,6 +39,7 @@ class Game {
     this.loadingMessage = '';
     this.loadingProgress = 0;
     this.trackMode = TRACK_MODE_POINT_TO_POINT;
+    this._loadingAborted = false;
 
     this._alanLinkBounds = null;
     this._resize();
@@ -176,6 +183,7 @@ class Game {
 
   async _onLocationSelected(lat, lng, startLL, finishLL) {
     this.state = GameState.LOADING;
+    this._loadingAborted = false;
     this.loadingProgress = 0.05;
     this.loadingMessage = 'Fetching roads (trying servers...)';
 
@@ -183,6 +191,7 @@ class Game {
       // Step 1: Fetch from Overpass API (tries multiple servers)
       this.loadingProgress = 0.1;
       const ways = await this.osmLoader.fetchRoads(lat, lng, OSM_FETCH_RADIUS);
+      if (this._loadingAborted) return;
 
       if (ways.length === 0) {
         this.loadingMessage = 'No roads found here. Try a more urban area.';
@@ -214,6 +223,7 @@ class Game {
       } catch (e) {
         console.warn('Tile fetch failed (non-fatal):', e);
       }
+      if (this._loadingAborted) return;
 
       // Step 4: Find start/finish — use user-picked points or auto-find
       this.loadingMessage = 'Setting up race route...';
@@ -256,6 +266,7 @@ class Game {
 
       // Use a small delay to let the loading screen render
       await new Promise(r => setTimeout(r, 50));
+      if (this._loadingAborted) return;
 
       this.track = new RoadNetwork(segments, start, finish, tiles);
       this.trackMode = TRACK_MODE_POINT_TO_POINT;
@@ -324,7 +335,10 @@ class Game {
         break;
 
       case GameState.LOADING:
-        // Nothing to update — async loading handles state transitions
+        if (this.input.wasPressed('Escape')) {
+          this._loadingAborted = true;
+          this.state = GameState.MENU;
+        }
         break;
 
       case GameState.COUNTDOWN:
@@ -342,137 +356,7 @@ class Game {
         break;
 
       case GameState.RACING:
-        this.raceTime += dt;
-        for (const car of this.cars) car.totalTime = this.raceTime;
-        if (this.warningPopupTimer > 0) this.warningPopupTimer -= dt;
-        if (this.warningCooldown > 0) this.warningCooldown -= dt;
-
-        this.sound.resume();
-        this.player.handleInput(this.input);
-        this.player.update(dt, this.track);
-
-        for (const car of this.cars) {
-          if (car instanceof PoliceCar) {
-            car.updatePolice(dt, this.track, this.player, this.cars);
-            car.update(dt, this.track);
-          } else if (car instanceof AICar) {
-            car.updateAI(dt, this.track, this.cars);
-            car.update(dt, this.track);
-          }
-        }
-
-        // Check for warnings — 3 strikes and you're out
-        if (this.warningCooldown <= 0) {
-          for (const cop of this.policeCars) {
-            if (cop.checkArrest(this.player)) {
-              this.warnings++;
-              cop.freeze();
-              this.warningPopupTimer = WARNING_POPUP_DURATION;
-              this.warningCooldown = WARNING_COOLDOWN;
-
-              if (this.warnings >= MAX_WARNINGS) {
-                this.arrested = true;
-                this.state = GameState.FINISHED;
-                this.sound.silence();
-              }
-              break; // only one warning per frame
-            }
-          }
-        }
-
-        // boundary collisions — push cars back toward road when off-road
-        for (const car of this.cars) {
-          const surface = this.track.getSurface(car.x, car.y);
-          if (surface === 'grass') {
-            const roadInfo = this.track.getNearestRoad(car.x, car.y);
-            if (roadInfo) {
-              const dx = roadInfo.x - car.x, dy = roadInfo.y - car.y;
-              const d = Math.sqrt(dx * dx + dy * dy) || 1;
-              const nx = dx / d, ny = dy / d;
-              // Strong push — scales with distance off-road
-              const pushStr = Math.min(d * COLLISION_PUSH_FACTOR, COLLISION_PUSH_MAX);
-              car.x += nx * pushStr;
-              car.y += ny * pushStr;
-              // Heavy speed penalty off-road
-              car.speed *= COLLISION_SPEED_DECAY;
-              // Kill lateral velocity to prevent drifting further off
-              const rx = -Math.sin(car.angle), ry = Math.cos(car.angle);
-              const latComp = car.vx * rx + car.vy * ry;
-              car.vx -= rx * latComp * 0.5;
-              car.vy -= ry * latComp * 0.5;
-              // Also steer car back toward road
-              const toRoadAngle = Math.atan2(dy, dx);
-              const angleDiff = toRoadAngle - car.angle;
-              const norm = normalizeAngle(angleDiff);
-              car.angle += norm * OFF_ROAD_CORRECTION;
-            }
-          } else if (surface === 'curb') {
-            // Curb: mild correction to keep car on road
-            const roadInfo = this.track.getNearestRoad(car.x, car.y);
-            if (roadInfo) {
-              const dx = roadInfo.x - car.x, dy = roadInfo.y - car.y;
-              const d = Math.sqrt(dx * dx + dy * dy) || 1;
-              car.x += (dx / d) * OFF_ROAD_PUSH_SPEED;
-              car.y += (dy / d) * OFF_ROAD_PUSH_SPEED;
-              car.speed *= OFF_ROAD_SPEED_DECAY;
-            }
-          }
-        }
-
-        // car-to-car collisions
-        for (let i = 0; i < this.cars.length; i++) {
-          for (let j = i+1; j < this.cars.length; j++) {
-            const a = this.cars[i], b = this.cars[j];
-            const dx = b.x - a.x, dy = b.y - a.y;
-            const d = Math.sqrt(dx*dx + dy*dy);
-            const minDist = 28;
-            if (d < minDist && d > 0) {
-              const nx = dx/d, ny = dy/d;
-              const overlap = (minDist - d) / 2;
-              a.x -= nx * overlap; a.y -= ny * overlap;
-              b.x += nx * overlap; b.y += ny * overlap;
-              const relV = dot(b.vx - a.vx, b.vy - a.vy, nx, ny);
-              if (relV < 0) {
-                a.vx += nx * relV * 0.5; a.vy += ny * relV * 0.5;
-                b.vx -= nx * relV * 0.5; b.vy -= ny * relV * 0.5;
-                a.speed *= 0.92; b.speed *= 0.92;
-              }
-            }
-          }
-        }
-
-        // particles
-        for (const car of this.cars) {
-          if (car.isDrifting) {
-            const cos = Math.cos(car.angle), sin = Math.sin(car.angle);
-            const rx = -sin, ry = cos;
-            for (const s of [-1, 1]) {
-              const wx = car.x - cos * car.length * 0.35 + rx * s * car.width * 0.4;
-              const wy = car.y - sin * car.length * 0.35 + ry * s * car.width * 0.4;
-              this.particles.emit(wx, wy, (Math.random()-0.5)*20, (Math.random()-0.5)*20 - 10, 'smoke');
-              this.particles.addSkidMark(wx, wy, 0.6);
-            }
-          }
-          if (car.throttle > 0.5 && Math.abs(car.speed) > 50) {
-            const cos = Math.cos(car.angle), sin = Math.sin(car.angle);
-            const ex = car.x - cos * car.length * 0.5;
-            const ey = car.y - sin * car.length * 0.5;
-            this.particles.emit(ex, ey, -cos*15 + (Math.random()-0.5)*5, -sin*15 + (Math.random()-0.5)*5, 'exhaust');
-          }
-          if (car.surfaceType === 'grass' && Math.abs(car.speed) > 30) {
-            this.particles.emit(car.x, car.y, (Math.random()-0.5)*30, (Math.random()-0.5)*30, 'dirt');
-          }
-        }
-        this.particles.update(dt);
-
-        this.camera.update(this.player, dt);
-        this.sound.update(this.player.speed, this.player.throttle, this.player.maxSpeed);
-
-        // check finish — player reached the finish point
-        if (this.player.finished) {
-          this.state = GameState.FINISHED;
-          this.sound.silence();
-        }
+        this._updateRacing(dt);
         break;
 
       case GameState.FINISHED:
@@ -487,6 +371,147 @@ class Game {
           this.state = GameState.MENU;
         }
         break;
+    }
+  }
+
+  // ---- Racing sub-updates (extracted for readability) ----
+
+  _updateRacing(dt) {
+    this.raceTime += dt;
+    for (const car of this.cars) car.totalTime = this.raceTime;
+    if (this.warningPopupTimer > 0) this.warningPopupTimer -= dt;
+    if (this.warningCooldown > 0) this.warningCooldown -= dt;
+
+    // Player + AI + Police updates
+    this.sound.resume();
+    this.player.handleInput(this.input);
+    this.player.update(dt, this.track);
+
+    for (const car of this.cars) {
+      if (car instanceof PoliceCar) {
+        car.updatePolice(dt, this.track, this.player, this.cars);
+        car.update(dt, this.track);
+      } else if (car instanceof AICar) {
+        car.updateAI(dt, this.track, this.cars);
+        car.update(dt, this.track);
+      }
+    }
+
+    // Warning check — 3 strikes and you're out
+    this._checkWarnings();
+
+    // Physics: boundary corrections + car-to-car collisions
+    this._updateBoundaryCollisions();
+    this._updateCarCollisions();
+
+    // Particles + camera + sound
+    this._emitCarParticles();
+    this.particles.update(dt);
+    this.camera.update(this.player, dt);
+    this.sound.update(this.player.speed, this.player.throttle, this.player.maxSpeed);
+
+    // Finish check
+    if (this.player.finished) {
+      this.state = GameState.FINISHED;
+      this.sound.silence();
+    }
+  }
+
+  _checkWarnings() {
+    if (this.warningCooldown > 0) return;
+    for (const cop of this.policeCars) {
+      if (cop.checkArrest(this.player)) {
+        this.warnings++;
+        cop.freeze();
+        this.warningPopupTimer = WARNING_POPUP_DURATION;
+        this.warningCooldown = WARNING_COOLDOWN;
+        if (this.warnings >= MAX_WARNINGS) {
+          this.arrested = true;
+          this.state = GameState.FINISHED;
+          this.sound.silence();
+        }
+        break; // only one warning per frame
+      }
+    }
+  }
+
+  _updateBoundaryCollisions() {
+    for (const car of this.cars) {
+      const surface = this.track.getSurface(car.x, car.y);
+      if (surface === 'grass') {
+        const roadInfo = this.track.getNearestRoad(car.x, car.y);
+        if (roadInfo) {
+          const dx = roadInfo.x - car.x, dy = roadInfo.y - car.y;
+          const d = Math.sqrt(dx * dx + dy * dy) || 1;
+          const nx = dx / d, ny = dy / d;
+          const pushStr = Math.min(d * COLLISION_PUSH_FACTOR, COLLISION_PUSH_MAX);
+          car.x += nx * pushStr;
+          car.y += ny * pushStr;
+          car.speed *= COLLISION_SPEED_DECAY;
+          const rx = -Math.sin(car.angle), ry = Math.cos(car.angle);
+          const latComp = car.vx * rx + car.vy * ry;
+          car.vx -= rx * latComp * 0.5;
+          car.vy -= ry * latComp * 0.5;
+          const toRoadAngle = Math.atan2(dy, dx);
+          const norm = normalizeAngle(toRoadAngle - car.angle);
+          car.angle += norm * OFF_ROAD_CORRECTION;
+        }
+      } else if (surface === 'curb') {
+        const roadInfo = this.track.getNearestRoad(car.x, car.y);
+        if (roadInfo) {
+          const dx = roadInfo.x - car.x, dy = roadInfo.y - car.y;
+          const d = Math.sqrt(dx * dx + dy * dy) || 1;
+          car.x += (dx / d) * OFF_ROAD_PUSH_SPEED;
+          car.y += (dy / d) * OFF_ROAD_PUSH_SPEED;
+          car.speed *= OFF_ROAD_SPEED_DECAY;
+        }
+      }
+    }
+  }
+
+  _updateCarCollisions() {
+    for (let i = 0; i < this.cars.length; i++) {
+      for (let j = i + 1; j < this.cars.length; j++) {
+        const a = this.cars[i], b = this.cars[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        const minDist = 28;
+        if (d < minDist && d > 0) {
+          const nx = dx / d, ny = dy / d;
+          const overlap = (minDist - d) / 2;
+          a.x -= nx * overlap; a.y -= ny * overlap;
+          b.x += nx * overlap; b.y += ny * overlap;
+          const relV = dot(b.vx - a.vx, b.vy - a.vy, nx, ny);
+          if (relV < 0) {
+            a.vx += nx * relV * 0.5; a.vy += ny * relV * 0.5;
+            b.vx -= nx * relV * 0.5; b.vy -= ny * relV * 0.5;
+            a.speed *= 0.92; b.speed *= 0.92;
+          }
+        }
+      }
+    }
+  }
+
+  _emitCarParticles() {
+    for (const car of this.cars) {
+      const cos = Math.cos(car.angle), sin = Math.sin(car.angle);
+      if (car.isDrifting) {
+        const rx = -sin, ry = cos;
+        for (const s of [-1, 1]) {
+          const wx = car.x - cos * car.length * 0.35 + rx * s * car.width * 0.4;
+          const wy = car.y - sin * car.length * 0.35 + ry * s * car.width * 0.4;
+          this.particles.emit(wx, wy, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20 - 10, 'smoke');
+          this.particles.addSkidMark(wx, wy, 0.6);
+        }
+      }
+      if (car.throttle > 0.5 && Math.abs(car.speed) > 50) {
+        const ex = car.x - cos * car.length * 0.5;
+        const ey = car.y - sin * car.length * 0.5;
+        this.particles.emit(ex, ey, -cos * 15 + (Math.random() - 0.5) * 5, -sin * 15 + (Math.random() - 0.5) * 5, 'exhaust');
+      }
+      if (car.surfaceType === 'grass' && Math.abs(car.speed) > 30) {
+        this.particles.emit(car.x, car.y, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, 'dirt');
+      }
     }
   }
 
@@ -518,7 +543,8 @@ class Game {
       return;
     }
 
-    // game view
+    // game view — pass current time to HUD for animations
+    this.hud.setTime(this.raceTime);
     ctx.fillStyle = COLORS.grass;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 

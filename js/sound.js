@@ -10,6 +10,7 @@ class SoundManager {
     this.muted = false;
   }
   init() {
+    if (this.started) return;
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       // Resume suspended context (browser autoplay policy)
@@ -37,7 +38,7 @@ class SoundManager {
     }
   }
   update(speed, throttle, maxSpeed) {
-    if (!this.started || this.muted) return;
+    if (!this.started || this.muted || !this.ctx || this.ctx.state !== 'running') return;
     const rpm = ENGINE_RPM_BASE + (Math.abs(speed) / maxSpeed) * ENGINE_RPM_RANGE;
     this.engineOsc.frequency.setTargetAtTime(rpm * 0.028, this.ctx.currentTime, 0.08);
     const g = 0.02 + throttle * 0.04;

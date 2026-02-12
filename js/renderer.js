@@ -164,60 +164,70 @@ class Renderer {
     }
   }
 
-  drawCar(car, camera) {
-    const ctx = this.ctx;
-    const s = camera.worldToScreen(car.x, car.y);
-    const z = camera.zoom || 1;
+  // Shared car body rendering: shadow, body shape, windshield, headlights, taillights
+  _drawCarBody(ctx, car, s, z, bodyGradStops, strokeColor) {
     ctx.save();
     ctx.translate(s.x, s.y);
     ctx.scale(z, z);
     ctx.rotate(car.angle);
 
-    // shadow
+    // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
-    ctx.ellipse(3, 3, car.length/2 + 2, car.width/2 + 2, 0, 0, Math.PI*2);
+    ctx.ellipse(3, 3, car.length / 2 + 2, car.width / 2 + 2, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // body
-    const grad = ctx.createLinearGradient(-car.length/2, -car.width/2, -car.length/2, car.width/2);
-    grad.addColorStop(0, lighten(car.color, 40));
-    grad.addColorStop(0.5, car.color);
-    grad.addColorStop(1, darken(car.color, 40));
+    // Body
+    const grad = ctx.createLinearGradient(-car.length / 2, -car.width / 2, -car.length / 2, car.width / 2);
+    for (const [stop, color] of bodyGradStops) grad.addColorStop(stop, color);
     ctx.fillStyle = grad;
-    roundRect(ctx, -car.length/2, -car.width/2, car.length, car.width, 4);
+    roundRect(ctx, -car.length / 2, -car.width / 2, car.length, car.width, 4);
     ctx.fill();
-    ctx.strokeStyle = darken(car.color, 60);
+    ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // windshield
+    // Windshield
     ctx.fillStyle = '#1a2a4a';
     ctx.beginPath();
-    ctx.moveTo(car.length/2 - 12, -car.width/2 + 3);
-    ctx.lineTo(car.length/2 - 5, -car.width/2 + 5);
-    ctx.lineTo(car.length/2 - 5, car.width/2 - 5);
-    ctx.lineTo(car.length/2 - 12, car.width/2 - 3);
+    ctx.moveTo(car.length / 2 - 12, -car.width / 2 + 3);
+    ctx.lineTo(car.length / 2 - 5, -car.width / 2 + 5);
+    ctx.lineTo(car.length / 2 - 5, car.width / 2 - 5);
+    ctx.lineTo(car.length / 2 - 12, car.width / 2 - 3);
     ctx.closePath();
     ctx.fill();
 
-    // rear spoiler
-    ctx.fillStyle = darken(car.color, 50);
-    ctx.fillRect(-car.length/2, -car.width/2 - 2, 3, car.width + 4);
-
-    // headlights
+    // Headlights
     ctx.fillStyle = '#FFE082';
-    ctx.fillRect(car.length/2 - 3, -car.width/2 + 2, 3, 4);
-    ctx.fillRect(car.length/2 - 3, car.width/2 - 6, 3, 4);
+    ctx.fillRect(car.length / 2 - 3, -car.width / 2 + 2, 3, 4);
+    ctx.fillRect(car.length / 2 - 3, car.width / 2 - 6, 3, 4);
 
-    // taillights
+    // Taillights
     ctx.fillStyle = '#C62828';
-    ctx.fillRect(-car.length/2, -car.width/2 + 2, 3, 4);
-    ctx.fillRect(-car.length/2, car.width/2 - 6, 3, 4);
+    ctx.fillRect(-car.length / 2, -car.width / 2 + 2, 3, 4);
+    ctx.fillRect(-car.length / 2, car.width / 2 - 6, 3, 4);
 
-    // racing stripe
-    ctx.fillStyle = `rgba(255,255,255,0.15)`;
-    ctx.fillRect(-car.length/2 + 5, -1.5, car.length - 10, 3);
+    return ctx; // still in save/translate/rotate state
+  }
+
+  drawCar(car, camera) {
+    const ctx = this.ctx;
+    const s = camera.worldToScreen(car.x, car.y);
+    const z = camera.zoom || 1;
+
+    this._drawCarBody(ctx, car, s, z, [
+      [0, lighten(car.color, 40)],
+      [0.5, car.color],
+      [1, darken(car.color, 40)]
+    ], darken(car.color, 60));
+
+    // Rear spoiler
+    ctx.fillStyle = darken(car.color, 50);
+    ctx.fillRect(-car.length / 2, -car.width / 2 - 2, 3, car.width + 4);
+
+    // Racing stripe
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(-car.length / 2 + 5, -1.5, car.length - 10, 3);
 
     ctx.restore();
   }
@@ -226,67 +236,25 @@ class Renderer {
     const ctx = this.ctx;
     const s = camera.worldToScreen(car.x, car.y);
     const z = camera.zoom || 1;
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.scale(z, z);
-    ctx.rotate(car.angle);
 
-    // shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.beginPath();
-    ctx.ellipse(3, 3, car.length/2 + 2, car.width/2 + 2, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    // body — black and white police scheme
-    const grad = ctx.createLinearGradient(-car.length/2, -car.width/2, -car.length/2, car.width/2);
-    grad.addColorStop(0, '#2A2A2A');
-    grad.addColorStop(0.3, '#1A1A2E');
-    grad.addColorStop(0.5, '#1A1A2E');
-    grad.addColorStop(0.7, '#1A1A2E');
-    grad.addColorStop(1, '#2A2A2A');
-    ctx.fillStyle = grad;
-    roundRect(ctx, -car.length/2, -car.width/2, car.length, car.width, 4);
-    ctx.fill();
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    this._drawCarBody(ctx, car, s, z, [
+      [0, '#2A2A2A'],
+      [0.3, '#1A1A2E'],
+      [0.5, '#1A1A2E'],
+      [0.7, '#1A1A2E'],
+      [1, '#2A2A2A']
+    ], '#333');
 
     // White door panels
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(-5, -car.width/2 + 2, 14, car.width - 4);
-
-    // windshield
-    ctx.fillStyle = '#1a2a4a';
-    ctx.beginPath();
-    ctx.moveTo(car.length/2 - 12, -car.width/2 + 3);
-    ctx.lineTo(car.length/2 - 5, -car.width/2 + 5);
-    ctx.lineTo(car.length/2 - 5, car.width/2 - 5);
-    ctx.lineTo(car.length/2 - 12, car.width/2 - 3);
-    ctx.closePath();
-    ctx.fill();
-
-    // headlights
-    ctx.fillStyle = '#FFE082';
-    ctx.fillRect(car.length/2 - 3, -car.width/2 + 2, 3, 4);
-    ctx.fillRect(car.length/2 - 3, car.width/2 - 6, 3, 4);
-
-    // taillights
-    ctx.fillStyle = '#C62828';
-    ctx.fillRect(-car.length/2, -car.width/2 + 2, 3, 4);
-    ctx.fillRect(-car.length/2, car.width/2 - 6, 3, 4);
+    ctx.fillRect(-5, -car.width / 2 + 2, 14, car.width - 4);
 
     // Roof light bar — flashing blue and red
     const flashPhase = Math.floor(time * 8) % 2;
-    const lightBarY = -car.width/2 + 3;
-    const lightBarH = car.width - 6;
-
-    // Left light (blue/off)
     ctx.fillStyle = flashPhase === 0 ? '#2196F3' : '#0D47A1';
-    ctx.fillRect(-2, -car.width/2 + 3, 4, car.width/2 - 3);
-
-    // Right light (red/off)
+    ctx.fillRect(-2, -car.width / 2 + 3, 4, car.width / 2 - 3);
     ctx.fillStyle = flashPhase === 1 ? '#F44336' : '#B71C1C';
-    ctx.fillRect(-2, 0, 4, car.width/2 - 3);
+    ctx.fillRect(-2, 0, 4, car.width / 2 - 3);
 
     ctx.restore();
 

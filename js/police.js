@@ -46,7 +46,7 @@ class PoliceCar extends Car {
       this.vy = 0;
       this.throttle = 0;
       this.brake = 1;
-      if (this.freezeTimer <= 0) {
+      if (this.freezeTimer <= 0 || !isFinite(this.freezeTimer)) {
         this.isFrozen = false;
         this.freezeTimer = 0;
       }
@@ -97,7 +97,8 @@ class PoliceCar extends Car {
       const playerDirX = dx / distToPlayer, playerDirY = dy / distToPlayer;
       const roadDot = cos * playerDirX + sin * playerDirY;
 
-      // If road goes toward player, follow it; otherwise go more direct
+      // Blend: 0.3 = mostly road-following (road aligns with player),
+      // 0.1 = mostly direct pursuit (road doesn't lead toward player)
       const blend = roadDot > 0.3 ? 0.3 : 0.1;
       const lookDist = this.lookAhead + Math.abs(this.speed) * 0.2;
       targetX = this.x + (cos * blend + playerDirX * (1 - blend)) * lookDist;
@@ -110,17 +111,17 @@ class PoliceCar extends Car {
     // Steer toward target
     const targetAngle = Math.atan2(targetY - this.y, targetX - this.x);
     const angleDiff = normalizeAngle(targetAngle - this.angle);
-    this.steerInput = clamp(angleDiff * 4.0, -1, 1);
+    this.steerInput = clamp(angleDiff * 4.0, -1, 1); // 4.0 = aggressive steering response
 
     // Speed control — aggressive pursuit
     const absTurn = Math.abs(angleDiff);
-    const safeSpeed = Math.max(40, this.maxSpeed * (1 - absTurn * 1.0));
+    const safeSpeed = Math.max(40, this.maxSpeed * (1 - absTurn * 1.0)); // floor 40px/s, full braking in sharp turns
 
     if (this.speed > safeSpeed * 1.05) {
       this.throttle = 0;
       this.brake = clamp((this.speed - safeSpeed) / 80, 0.1, 0.9);
     } else {
-      this.throttle = clamp((safeSpeed - this.speed) / 80, 0.6, 1.0);
+      this.throttle = clamp((safeSpeed - this.speed) / 80, 0.6, 1.0); // min 0.6 = always gunning it
       this.brake = 0;
     }
     this.handbrake = false;

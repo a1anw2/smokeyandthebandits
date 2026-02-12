@@ -1,111 +1,114 @@
 // ============================================================
 // CONSTANTS & CONFIGURATION
 // ============================================================
-const CANVAS_W = 1280, CANVAS_H = 720;
+
+// --- Display ---
+const CANVAS_W = 1280, CANVAS_H = 720;        // pixels
+
+// --- Legacy (circuit mode — retained for compatibility) ---
 const TOTAL_LAPS = 3;
 const NUM_AI = 4;
 const TRACK_SAMPLES = 1500;
-const MAX_PARTICLES = 250;
-const MAX_SKIDMARKS = 600;
-const GRID_CELL = 200;
-
-// Track modes
 const TRACK_MODE_CIRCUIT = 'circuit';
 const TRACK_MODE_POINT_TO_POINT = 'point-to-point';
 
-// === CAR PHYSICS ===
-const CAR_WIDTH = 20;
-const CAR_LENGTH = 38;
-const CAR_MAX_SPEED = 340;
-const CAR_ACCEL = 220;
-const CAR_BRAKE_FORCE = 380;
-const CAR_TURN_RATE = 2.6;
-const CAR_GRIP = 1.0;
-const CAR_DRIFT_FACTOR = 0.92;
-const CAR_DRAG = 0.0008;
-const CAR_ROLLING_RESIST = 0.4;
-const CAR_REVERSE_MAX = -80;
-const SPEED_FACTOR_DIVISOR = 50;
-const TURN_REDUCTION_AT_SPEED = 0.55;
-const HANDBRAKE_TURN_MULT = 1.6;
-const HANDBRAKE_DRIFT = 0.96;
-const DRIFT_THRESHOLD = 25;
+// --- Limits ---
+const MAX_PARTICLES = 250;
+const MAX_SKIDMARKS = 600;
+const GRID_CELL = 200;                         // px — collision grid cell size
 
-// === SURFACE PHYSICS ===
-const CURB_GRIP = 0.85;
-const CURB_DRAG = 10;
-const GRASS_GRIP = 0.45;
-const GRASS_DRAG = 80;
+// --- Car Physics ---
+const CAR_WIDTH = 20;                          // px
+const CAR_LENGTH = 38;                         // px
+const CAR_MAX_SPEED = 340;                     // px/s
+const CAR_ACCEL = 220;                         // px/s²
+const CAR_BRAKE_FORCE = 380;                   // px/s²
+const CAR_TURN_RATE = 2.6;                     // rad/s
+const CAR_GRIP = 1.0;                          // multiplier (1.0 = full grip)
+const CAR_DRIFT_FACTOR = 0.92;                 // lateral velocity retention
+const CAR_DRAG = 0.0008;                       // quadratic drag coefficient
+const CAR_ROLLING_RESIST = 0.4;                // px/s² constant decel
+const CAR_REVERSE_MAX = -80;                   // px/s
+const SPEED_FACTOR_DIVISOR = 50;               // steering reduction scale
+const TURN_REDUCTION_AT_SPEED = 0.55;          // min steering fraction at top speed
+const HANDBRAKE_TURN_MULT = 1.6;               // steering multiplier during handbrake
+const HANDBRAKE_DRIFT = 0.96;                  // grip multiplier during handbrake
+const DRIFT_THRESHOLD = 25;                    // lateral speed for isDrifting flag
 
-// === POLICE ===
-const POLICE_SPEED_FACTOR = 0.92;
-const POLICE_ACCEL = 300;
-const POLICE_BRAKE = 400;
-const POLICE_TURN_RATE = 2.8;
-const POLICE_LOOKAHEAD = 140;
-const POLICE_RADAR_RADIUS = 120;
-const POLICE_CHASE_RANGE = 1100;
-const POLICE_GIVE_UP_RANGE = 3500;
-const POLICE_CRUISE_SPEED = 70;
+// --- Surface Physics ---
+const CURB_GRIP = 0.85;                        // grip multiplier on curbs
+const CURB_DRAG = 10;                          // px/s² drag on curbs
+const GRASS_GRIP = 0.45;                       // grip multiplier on grass
+const GRASS_DRAG = 80;                         // px/s² drag on grass
+
+// --- Police ---
+const POLICE_SPEED_FACTOR = 0.92;              // fraction of player max speed
+const POLICE_ACCEL = 300;                      // px/s²
+const POLICE_BRAKE = 400;                      // px/s²
+const POLICE_TURN_RATE = 2.8;                  // rad/s
+const POLICE_LOOKAHEAD = 140;                  // px — AI look-ahead distance
+const POLICE_RADAR_RADIUS = 120;               // px — arrest detection zone
+const POLICE_CHASE_RANGE = 1100;               // px — start chasing when player is this close
+const POLICE_GIVE_UP_RANGE = 3500;             // px — stop chasing when player escapes this far
+const POLICE_CRUISE_SPEED = 70;                // px/s — patrol speed when not chasing
 const NUM_POLICE = 15;
-const MIN_POLICE_SPACING = 400;
-const MIN_DIST_FROM_START = 600;
-const POLICE_CORRIDOR_MAX = 2000;
-const MAX_WARNINGS = 3;
-const POLICE_FREEZE_DURATION = 4;
-const WARNING_POPUP_DURATION = 2;
-const WARNING_COOLDOWN = 1;
+const MIN_POLICE_SPACING = 400;                // px — minimum gap between spawned police
+const MIN_DIST_FROM_START = 600;               // px — no police within this range of start
+const POLICE_CORRIDOR_MAX = 2000;              // px — max perpendicular distance from route line
+const MAX_WARNINGS = 3;                        // strikes before busted
+const POLICE_FREEZE_DURATION = 4;              // seconds — cop stops after issuing warning
+const WARNING_POPUP_DURATION = 2;              // seconds — HUD popup display time
+const WARNING_COOLDOWN = 1;                    // seconds — grace period between warnings
 
-// === CAMERA ===
-const CAMERA_SMOOTHING = 0.07;
+// --- Camera ---
+const CAMERA_SMOOTHING = 0.07;                 // exponential smoothing (0 = snap, 1 = frozen)
 const CAMERA_ZOOM_INITIAL = 0.2;
 const CAMERA_ZOOM_MIN = 0.2;
 const CAMERA_ZOOM_MAX = 1.5;
-const CAMERA_ZOOM_STEP = 0.15;
-const CAMERA_LOOKAHEAD = 90;
+const CAMERA_ZOOM_STEP = 0.15;                 // per key press
+const CAMERA_LOOKAHEAD = 90;                   // px — camera leads player by this much
 
-// === GAME ===
-const COUNTDOWN_TIME = 3.5;
-const AI_STUCK_TIMEOUT = 2;
-const AI_STUCK_RECOVERY_SPEED = 50;
-const OFF_ROAD_CORRECTION = 0.08;
-const COLLISION_PUSH_FACTOR = 0.4;
-const COLLISION_PUSH_MAX = 20;
-const COLLISION_SPEED_DECAY = 0.93;
-const OFF_ROAD_PUSH_SPEED = 1.5;
-const OFF_ROAD_SPEED_DECAY = 0.98;
-const MIN_START_FINISH_DIST = 200;
-const MAX_SNAP_DIST = 500;
+// --- Game ---
+const COUNTDOWN_TIME = 3.5;                    // seconds
+const AI_STUCK_TIMEOUT = 2;                    // seconds before unstick
+const AI_STUCK_RECOVERY_SPEED = 50;            // px/s
+const OFF_ROAD_CORRECTION = 0.08;              // rad — angle correction per frame
+const COLLISION_PUSH_FACTOR = 0.4;             // push strength multiplier
+const COLLISION_PUSH_MAX = 20;                 // px — max push per frame
+const COLLISION_SPEED_DECAY = 0.93;            // speed multiplier on grass collision
+const OFF_ROAD_PUSH_SPEED = 1.5;              // px — curb correction push
+const OFF_ROAD_SPEED_DECAY = 0.98;             // speed multiplier on curb
+const MIN_START_FINISH_DIST = 200;             // px — minimum distance between start and finish
+const MAX_SNAP_DIST = 500;                     // px — max snap distance for lat/lng → road point
 
-// === PARTICLES ===
-const SKID_FADE_RATE = 0.08;
-const PARTICLE_DRAG = 0.97;
+// --- Particles ---
+const SKID_FADE_RATE = 0.08;                   // alpha/s
+const PARTICLE_DRAG = 0.97;                    // velocity multiplier per frame
 
-// === RENDERING ===
-const MAX_CANVAS_DIM = 10000;
-const GRASS_STRIPE_HEIGHT = 40;
-const CURB_SEGMENT_STEP = 8;
-const CURB_VISUAL_WIDTH = 8;
-const TILE_OPACITY = 0.45;
+// --- Rendering ---
+const MAX_CANVAS_DIM = 10000;                  // px — cap off-screen canvas size
+const GRASS_STRIPE_HEIGHT = 40;                // px
+const CURB_SEGMENT_STEP = 8;                   // points per curb stripe
+const CURB_VISUAL_WIDTH = 8;                   // px
+const TILE_OPACITY = 0.45;                     // OSM background tile transparency
 
-// === SOUND ===
-const ENGINE_BASE_FREQ = 80;
-const ENGINE_FILTER_FREQ = 400;
-const ENGINE_RPM_BASE = 800;
-const ENGINE_RPM_RANGE = 4500;
+// --- Sound ---
+const ENGINE_BASE_FREQ = 80;                   // Hz — idle engine frequency
+const ENGINE_FILTER_FREQ = 400;                // Hz — lowpass cutoff
+const ENGINE_RPM_BASE = 800;                   // RPM at idle
+const ENGINE_RPM_RANGE = 4500;                 // RPM added at full speed
 
-// === NETWORK ===
-const OSM_FETCH_TIMEOUT = 45000;
-const TILE_FETCH_TIMEOUT = 15000;
+// --- Network / OSM ---
+const OSM_FETCH_TIMEOUT = 45000;               // ms
+const TILE_FETCH_TIMEOUT = 15000;              // ms
 const MAX_TILES = 250;
+const OSM_FETCH_RADIUS = 5000;                 // meters — area fetched around selected point
+const PIXELS_PER_METER = 3;                    // world scale
+const SIMPLIFICATION_TOLERANCE = 0.00003;      // degrees (~3m) — Douglas-Peucker tolerance
+const ROAD_GRID_CELL = 100;                    // px — spatial grid cell size for road queries
+const FINISH_RADIUS = 80;                      // px — proximity to finish point to complete race
 
-// OSM configuration
-const OSM_FETCH_RADIUS = 5000; // meters
-const PIXELS_PER_METER = 3;
-const SIMPLIFICATION_TOLERANCE = 0.00003; // degrees (~3m)
-const ROAD_GRID_CELL = 100; // spatial grid cell size for road network
-const FINISH_RADIUS = 80; // pixels - how close to finish point to count as finished
-
+// --- Road Widths (px) ---
 const ROAD_WIDTHS = {
   motorway: 55, motorway_link: 45,
   trunk: 50, trunk_link: 40,
@@ -117,6 +120,7 @@ const ROAD_WIDTHS = {
 };
 const DEFAULT_ROAD_WIDTH = 30;
 
+// --- Colors ---
 const COLORS = {
   player: '#FFD700',
   ai: ['#E53935', '#1E88E5', '#43A047', '#8E24AA'],

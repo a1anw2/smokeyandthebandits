@@ -1,6 +1,12 @@
 // ============================================================
 // PARTICLE SYSTEM
 // ============================================================
+const PARTICLE_PROPS = {
+  smoke:   { life: 0.8, size: 4 },
+  exhaust: { life: 0.4, size: 2 },
+  dirt:    { life: 0.5, size: 3 }
+};
+
 class ParticleSystem {
   constructor() {
     this.particles = [];
@@ -10,11 +16,12 @@ class ParticleSystem {
 
   emit(x, y, vx, vy, type) {
     if (this.particles.length >= MAX_PARTICLES) return;
+    const props = PARTICLE_PROPS[type] || PARTICLE_PROPS.dirt;
     const p = {
       x, y, vx, vy, type,
-      life: type === 'smoke' ? 0.8 : type === 'exhaust' ? 0.4 : 0.5,
-      maxLife: type === 'smoke' ? 0.8 : type === 'exhaust' ? 0.4 : 0.5,
-      size: type === 'smoke' ? 4 : type === 'exhaust' ? 2 : 3,
+      life: props.life,
+      maxLife: props.life,
+      size: props.size,
     };
     this.particles.push(p);
   }

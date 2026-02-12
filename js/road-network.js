@@ -81,20 +81,6 @@ class RoadNetwork {
     }
   }
 
-  _addBoundaryToGrid(a, b, segIdx, ptIdx, side) {
-    const minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x);
-    const minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y);
-    const gx0 = Math.floor(minX / ROAD_GRID_CELL), gx1 = Math.floor(maxX / ROAD_GRID_CELL);
-    const gy0 = Math.floor(minY / ROAD_GRID_CELL), gy1 = Math.floor(maxY / ROAD_GRID_CELL);
-    for (let gx = gx0; gx <= gx1; gx++) {
-      for (let gy = gy0; gy <= gy1; gy++) {
-        const key = `${gx},${gy}`;
-        if (!this.grid[key]) this.grid[key] = { roads: [], boundaries: [] };
-        this.grid[key].boundaries.push({ a, b, segIdx, ptIdx, side });
-      }
-    }
-  }
-
   _computeBounds() {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const seg of this.segments) {
@@ -144,11 +130,6 @@ class RoadNetwork {
     if (minDist < nearestWidth - 6) return 'asphalt';
     if (minDist < nearestWidth + 2) return 'curb';
     return 'grass';
-  }
-
-  // Get boundary segments near a point (disabled — roads are connected, cars roam freely)
-  getSegmentsNear(x, y) {
-    return [];
   }
 
   // Clear per-frame result cache (call at start of each game frame)
@@ -556,24 +537,4 @@ class RoadNetwork {
     tc.restore();
   }
 
-  _drawEndpointLabel(tc, point, text, color) {
-    const info = this.getNearestRoad(point.x, point.y);
-    const w = info ? info.width : DEFAULT_ROAD_WIDTH;
-    // Draw label offset above/below the road
-    const offsetY = -(w + 25);
-    tc.save();
-    tc.font = 'bold 22px sans-serif';
-    tc.textAlign = 'center';
-    tc.textBaseline = 'middle';
-    // Background pill
-    const metrics = tc.measureText(text);
-    const pw = metrics.width + 16, ph = 28;
-    tc.fillStyle = 'rgba(0,0,0,0.7)';
-    roundRect(tc, point.x - pw / 2, point.y + offsetY - ph / 2, pw, ph, 6);
-    tc.fill();
-    // Text
-    tc.fillStyle = color;
-    tc.fillText(text, point.x, point.y + offsetY);
-    tc.restore();
-  }
 }

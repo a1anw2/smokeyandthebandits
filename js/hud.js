@@ -5,7 +5,10 @@ class HUD {
   constructor() {
     this._minimapCache = null;
     this._minimapTrack = null;
+    this._time = 0; // game time in seconds, updated each frame
   }
+
+  setTime(t) { this._time = t; }
 
   drawSpeedometer(ctx, speed, maxSpeed) {
     const cx = CANVAS_W - 100, cy = CANVAS_H - 90, r = 55;
@@ -119,8 +122,8 @@ class HUD {
     const arrowLen = 14;
     const arrowW = 7;
 
-    // Pulsating glow
-    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+    // Pulsating glow (use raceTime passed via game loop)
+    const pulse = 0.5 + 0.5 * Math.sin(this._time * 3.33);
     const alpha = 0.6 + pulse * 0.4;
 
     // Outer glow
@@ -181,11 +184,11 @@ class HUD {
     if (nearestDist > 1200) return; // too far, no warning
 
     const danger = clamp(1 - nearestDist / dangerDist, 0, 1);
-    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 150);
+    const pulse = 0.5 + 0.5 * Math.sin(this._time * 6.67);
 
     // Screen edge flash when close
     if (danger > 0.3) {
-      const flash = Math.floor(Date.now() / 200) % 2;
+      const flash = Math.floor(this._time * 5) % 2;
       const edgeAlpha = danger * 0.2 * pulse;
       ctx.fillStyle = flash === 0
         ? `rgba(33,150,243,${edgeAlpha})`
@@ -338,7 +341,7 @@ class HUD {
 
       if (car instanceof PoliceCar) {
         // Police: flashing blue/red dot
-        const flash = Math.floor(Date.now() / 300) % 2;
+        const flash = Math.floor(this._time * 3.33) % 2;
         ctx.fillStyle = flash === 0 ? '#2196F3' : '#F44336';
         ctx.beginPath();
         ctx.arc(sx, sy, 3.5, 0, Math.PI * 2);
@@ -461,7 +464,7 @@ class HUD {
 
   drawWarningPopup(ctx, timer, maxDuration) {
     const alpha = clamp(timer / (maxDuration * 0.5), 0, 1);
-    const flash = Math.floor(Date.now() / 200) % 2;
+    const flash = Math.floor(this._time * 5) % 2;
     const scale = 1 + (1 - alpha) * 0.1;
 
     ctx.save();

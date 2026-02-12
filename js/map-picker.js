@@ -104,7 +104,7 @@ class MapPicker {
     // Search box wrapper (top center, outside map container to avoid Leaflet capturing clicks)
     this._searchWrapper = document.createElement('div');
     this._searchWrapper.style.cssText = `
-      position: fixed; top: 48px; left: 50%; transform: translateX(-50%);
+      position: fixed; top: 54px; left: 50%; transform: translateX(-50%);
       z-index: 1001; display: flex; gap: 4px;
     `;
     document.body.appendChild(this._searchWrapper);
@@ -137,7 +137,7 @@ class MapPicker {
     // Quick-link cities bar
     this._citiesBar = document.createElement('div');
     this._citiesBar.style.cssText = `
-      position: fixed; top: 86px; left: 50%; transform: translateX(-50%);
+      position: fixed; top: 98px; left: 50%; transform: translateX(-50%);
       z-index: 1001; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
     `;
     const cities = [
@@ -160,7 +160,8 @@ class MapPicker {
       btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(0,0,0,0.7)'; btn.style.color = '#90CAF9'; });
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        // Only pan the map — user still needs to click the map to select area
+        // Clear any existing selection when navigating to a new city
+        this._resetSelection();
         if (this.map) this.map.setView([city.lat, city.lng], city.zoom);
       });
       this._citiesBar.appendChild(btn);
@@ -196,7 +197,9 @@ class MapPicker {
       if (results.length > 0) {
         const lat = parseFloat(results[0].lat);
         const lng = parseFloat(results[0].lon);
-        this.map.setView([lat, lng], 14);
+        // Clear any existing selection when searching to a new location
+        this._resetSelection();
+        this.map.setView([lat, lng], 12);
       } else {
         this.instructionEl.textContent = 'Location not found. Try again.';
         this.instructionEl.style.color = '#F44336';
@@ -316,7 +319,7 @@ class MapPicker {
   }
 
   _isWithinRadius(lat, lng) {
-    if (!this.selectedLat || !this.selectedLng) return false;
+    if (this.selectedLat == null || this.selectedLng == null) return false;
     const R = 6371000;
     const dLat = (lat - this.selectedLat) * Math.PI / 180;
     const dLon = (lng - this.selectedLng) * Math.PI / 180;

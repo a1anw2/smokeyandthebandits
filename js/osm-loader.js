@@ -192,15 +192,6 @@ class OSMLoader {
       // Road width from highway type
       const width = ROAD_WIDTHS[way.highway] || DEFAULT_ROAD_WIDTH;
 
-      // Lanes override
-      if (way.tags.lanes) {
-        const lanes = parseInt(way.tags.lanes);
-        if (lanes > 0) {
-          const laneWidth = width / 2; // base per-lane
-          // don't override if it would make narrower
-        }
-      }
-
       segments.push({
         points: simplified,
         width: width,
@@ -302,8 +293,8 @@ class OSMLoader {
   }
 
   // Douglas-Peucker line simplification (operates in pixel space)
-  simplify(points, tolerance) {
-    if (points.length <= 2) return points;
+  simplify(points, tolerance, depth = 0) {
+    if (points.length <= 2 || depth > 50) return points;
 
     let maxDist = 0, maxIdx = 0;
     const first = points[0], last = points[points.length - 1];
@@ -314,8 +305,8 @@ class OSMLoader {
     }
 
     if (maxDist > tolerance) {
-      const left = this.simplify(points.slice(0, maxIdx + 1), tolerance);
-      const right = this.simplify(points.slice(maxIdx), tolerance);
+      const left = this.simplify(points.slice(0, maxIdx + 1), tolerance, depth + 1);
+      const right = this.simplify(points.slice(maxIdx), tolerance, depth + 1);
       return left.slice(0, -1).concat(right);
     }
     return [first, last];
