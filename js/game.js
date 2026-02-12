@@ -647,7 +647,7 @@ class Game {
     ctx.shadowColor = '#FFD700';
     ctx.shadowBlur = 20;
     ctx.fillStyle = '#FFD700';
-    ctx.fillText('THE CANNONBALL RUN', CANVAS_W/2, 70);
+    ctx.fillText('SMOKEYS AND THE BANDIT', CANVAS_W/2, 70);
     ctx.shadowBlur = 0;
     ctx.restore();
 
@@ -694,7 +694,7 @@ class Game {
     ctx.fillStyle = `rgba(144,202,249,${0.4 + pulse * 0.6})`;
     ctx.font = 'bold 24px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('M - START THE CANNONBALL RUN', CANVAS_W/2, CANVAS_H/2 + 55);
+    ctx.fillText('M - START THE RUN', CANVAS_W/2, CANVAS_H/2 + 55);
 
     ctx.fillStyle = `rgba(255,255,255,${0.2 + pulse * 0.3})`;
     ctx.font = '14px monospace';
@@ -766,6 +766,12 @@ class Game {
     for (let i = 0; i < cityNames.length; i++) {
       ctx.fillText(cityNames[i], 130 + i * 230, CANVAS_H - 50);
     }
+
+    // Credit
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Vibe coded by Alan and Claude — alan.is', CANVAS_W/2, CANVAS_H - 15);
   }
 
   _renderCountdown() {
@@ -808,7 +814,7 @@ class Game {
     ctx.fillStyle = '#FFD700';
     ctx.font = 'bold 48px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('CANNONBALL COMPLETE!', CANVAS_W/2, 120);
+    ctx.fillText('RUN COMPLETE!', CANVAS_W/2, 120);
 
     const isOpen = this.track.isOpenTrack;
 
